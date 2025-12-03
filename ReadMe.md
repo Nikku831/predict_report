@@ -1,4 +1,4 @@
-# **AI Stock Research Copilot**  
+# **Prediction and Report Generation**  
 An autonomous agent that performs end-to-end equity research.  
 It ingests real-time market data, performs advanced time-series forecasting, analyzes news sentiment, and generates a professional PDF report using Google Gemini.
 

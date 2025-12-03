@@ -9,7 +9,7 @@ from src.visuals import Visualizer, PDFGenerator
 load_dotenv()
 
 def main():
-    print("--- AI Stock Research Copilot (Phase 1: Robustness + India Support) ---")
+    print("--- Prediction and Report generation ---")
     
     if not os.getenv("GOOGLE_API_KEY"):
         print(" CRITICAL: GOOGLE_API_KEY not found in .env file.")

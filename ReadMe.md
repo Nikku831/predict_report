@@ -1,66 +1,116 @@
-AI Stock Research Copilot (Week 1 MVP)
+# **AI Stock Research Copilot (Phase 1: Robustness)**  
+An autonomous agent that performs end-to-end equity research.  
+It ingests real-time market data, performs advanced time-series forecasting, analyzes news sentiment, and generates a professional PDF report using Google Gemini.
 
-This tool generates a PDF equity research report containing:
+---
 
-Quantitative Analysis (RSI, SMA).
+##  **Key Features**
 
-AI Prediction (30-day Price Forecast via Linear Regression).
+### **Advanced Forecasting**
+- Uses **Meta's Prophet model** (instead of simple Linear Regression).
+- Predicts **30-day future stock prices** with seasonality + trend modeling.
 
-Market News (Real-time search).
+### **Quantitative Analysis**
+- Computes key technical indicators:
+  - **RSI (14)**
+  - **SMA (50)**
+  - **SMA (200)**
 
-Charts (Price vs SMA visualization).
+### **AI Analyst Agent**
+- Uses **Google Gemini 2.5 Flash** to synthesize:
+  - Market data  
+  - Technical indicators  
+  - News sentiment  
+- Generates a **professional investment thesis**.
 
-Setup Instructions
+### **Multi-Market Support (New)**
+- Automatically detects **Indian stocks** (`.NS`, `.BO`) and switches currency formatting to **₹`.
+- Supports **US stocks** (`AAPL`, `TSLA`) with **$** formatting.
 
-1. Prerequisites
+### **Professional Outputs**
+- Generates a **Forecast Chart** (History + Prediction + Confidence Interval).
+- Produces a **formatted PDF report** with analyst commentary & tables.
 
-Python 3.9+ installed.
+---
 
-A Google Gemini API Key (Get it from Google AI Studio).
+##  **Setup Instructions**
 
-2. Installation
+### **1. Prerequisites**
+- Python **3.9+**
+- **C++ Build Tools** (required for Prophet)
+  - Windows: Install *"Desktop development with C++"* via Visual Studio Build Tools  
+  - Mac/Linux: Install via `xcode-select` or `build-essential`
+- A **Google Gemini API Key** (free from Google AI Studio)
 
-Create the project folder and navigate inside:
+---
 
+### **2. Installation**
+
+#### Create project:
+```bash
 mkdir ai_stock_copilot
 cd ai_stock_copilot
+```
 
-
-Create a virtual environment (optional but recommended):
-
+#### Create a Virtual Environment:
+```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
+##### Windows:
+```bash
+venv\Scripts\activate
+```
 
-Install dependencies:
+##### Mac/Linux:
+```bash
+source venv/bin/activate
+```
 
+#### Install dependencies:
+```bash
 pip install -r requirements.txt
+```
 
+---
 
-3. Configuration
+### **3. Configuration**
 
-Open the .env file.
+Create a file named **`.env`** in the project root.
 
-Paste your API key:
+Add your API key:
+```env
+GOOGLE_API_KEY=AIzaSy_Your_Key_Here
+```
 
-GOOGLE_API_KEY=AIzaSy...
+---
 
+##  **Usage**
 
-4. Running the Agent
-
-Run the main script:
-
+### Run the Agent:
+```bash
 python main.py
+```
 
+### Enter a ticker:
+- **US Market:** `NVDA`, `TSLA`, `AAPL`  
+- **Indian Market:** `RELIANCE.NS`, `TCS.NS`, `INFY.NS`
 
-5. Outputs
+### Wait for Processing:
+- Downloads **3 years of data**
+- Runs **Prophet forecasting**
+- Fetches **news sentiment**
+- Generates the **PDF report**
 
-Enter a ticker (e.g., AAPL).
+---
 
-Wait ~10 seconds.
+## **Outputs**
 
-Check the output/ folder for:
+Located in the `output/` folder:
 
-AAPL_chart.png (Technical Chart)
+- **`TICKER_forecast_chart.png`**  
+  Historical price + 30-day prediction cone  
+- **`TICKER_Report_FPDF.pdf`**  
+  Final 1-page professional research report
 
-AAPL_Report.pdf (Final Report)
+---

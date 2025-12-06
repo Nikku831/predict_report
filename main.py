@@ -1,77 +1,90 @@
 import os
+from crewai import Agent, Task, Crew, Process, LLM
+from crew_tools import StockAnalysisTools
+from src.visuals import PDFGenerator
 from dotenv import load_dotenv
-from src.ingestion import RealTimeIngestor
-from src.analysis import QuantitativeAnalyst
-from src.agent import ResearchAgent
-from src.schema import StockDataSchema
-from src.visuals import Visualizer, PDFGenerator
 
 load_dotenv()
+os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 
-def main():
-    print("--- Prediction and Report generation ---")
-    
-    if not os.getenv("GOOGLE_API_KEY"):
-        print(" CRITICAL: GOOGLE_API_KEY not found in .env file.")
-        return
+if not os.getenv("GOOGLE_API_KEY"):
+    print("❌ Error: GOOGLE_API_KEY not found in .env")
+    exit(1)
 
-    ticker = input("Enter Stock Ticker (e.g., RELIANCE.NS, TCS.NS, NVDA): ").strip().upper()
-    
-    # 1. Determine Currency
-    # If ticker ends with .NS (NSE) or .BO (BSE), use Rupee symbol
-    currency_symbol = "₹" if ticker.endswith((".NS", ".BO")) else "$"
+# Using native CrewAI LLM class with 'gemini/' prefix
+llm = LLM(
+    model="gemini/gemini-2.5-flash",
+    verbose=True,
+    temperature=0.3,
+    api_key=os.getenv("GOOGLE_API_KEY")
+)
 
-    # 2. Ingestion Phase
-    ingestor = RealTimeIngestor()
-    hist_data, fundamentals = ingestor.get_stock_data(ticker, period="3y") 
-    news_data = ingestor.get_latest_news(ticker)
+# --- Agents ---
+market_researcher = Agent(
+    role='Senior Market Researcher',
+    goal='Gather comprehensive financial data and news.',
+    backstory="You are an expert at digging up financial statements and market news.",
+    verbose=True,
+    tools=[StockAnalysisTools.fetch_stock_data, StockAnalysisTools.fetch_news],
+    llm=llm
+)
 
-    if hist_data.empty:
-        print(f" No data found for {ticker}. Exiting.")
-        return
+quant_analyst = Agent(
+    role='Quantitative Analyst',
+    goal='Forecast stock trends for the next 30 days.',
+    backstory="You use Prophet models to predict medium-term stock trends.",
+    verbose=True,
+    tools=[StockAnalysisTools.run_prophet, StockAnalysisTools.generate_chart],
+    llm=llm
+)
 
-    # 3. Analysis Phase
-    analyst = QuantitativeAnalyst()
-    processed_df = analyst.calculate_technicals(hist_data)
-    
-    target_price, trend, forecast_df, model = analyst.predict_future_price(processed_df)
-    
-    print(f" Prophet 30-Day Forecast: {trend} @ {currency_symbol}{target_price:.2f}")
+report_writer = Agent(
+    role='Equity Research Analyst',
+    goal='Write a professional research report with a 30-day outlook.',
+    backstory="You write equity research reports for hedge funds. You MUST use Markdown headers (#) and bold text (**) for formatting.",
+    verbose=True,
+    llm=llm
+)
 
-    # 4. Visuals Phase (Pass currency for chart labels)
-    viz = Visualizer()
-    chart_path = viz.generate_charts(processed_df, ticker, forecast_df, currency_symbol)
+# --- Tasks ---
+task_gather_data = Task(
+    description="Fetch stock fundamentals, price history, and top news headlines for {ticker}.",
+    agent=market_researcher,
+    expected_output="A summary of the stock's financial health and news."
+)
 
-    # 5. Schema Construction
-    if processed_df.empty:
-        print(" Not enough data for technicals.")
-        return
-        
-    latest_row = processed_df.iloc[-1]
-    
-    data_schema = StockDataSchema(
-        ticker=ticker,
-        current_price=fundamentals.get('current_price', 0.0),
-        market_cap=fundamentals.get('market_cap', 0),
-        pe_ratio=fundamentals.get('pe_ratio', 0.0),
-        sma_50=latest_row['SMA_50'],
-        sma_200=latest_row['SMA_200'],
-        rsi=latest_row['RSI'],
-        prediction_30d=round(target_price, 2),
-        trend=trend,
-        news_summary=str(news_data)[:1000],
-        currency_symbol=currency_symbol # Pass determined currency
-    )
-    
-    # 6. Reasoning Phase
-    agent = ResearchAgent()
-    report_text = agent.write_report(data_schema.to_dict())
-    
-    # 7. Reporting Phase
-    pdf_gen = PDFGenerator()
-    pdf_gen.create_pdf(data_schema.to_dict(), report_text, chart_path)
-    
-    print("\n Process Complete. Check the 'output' folder.")
+task_analyze = Task(
+    description="Run the Prophet model to predict the price 30 days out for {ticker}. Also generate a chart.",
+    agent=quant_analyst,
+    expected_output="A technical forecast stating the Trend and predicted price."
+)
+
+task_write_report = Task(
+    description="Write a Comprehensive Research Report for {ticker}. Include Current Price, 30-Day Prediction, and analysis of news. Use headers and bold text.",
+    agent=report_writer,
+    expected_output="A structured markdown report."
+)
+
+# --- Crew ---
+stock_crew = Crew(
+    agents=[market_researcher, quant_analyst, report_writer],
+    tasks=[task_gather_data, task_analyze, task_write_report],
+    verbose=True,
+    process=Process.sequential
+)
 
 if __name__ == "__main__":
-    main()
+    print("--- CrewAI Stock Research Team (Standard 30-Day Model) ---")
+    ticker = input("Enter Ticker (e.g., TSLA, RELIANCE.NS): ").strip().upper()
+    
+    result_obj = stock_crew.kickoff(inputs={'ticker': ticker})
+    final_report_text = str(result_obj)
+
+    print("\n\n########################")
+    print("## GENERATING PDF...  ##")
+    print("########################\n")
+
+    pdf_gen = PDFGenerator()
+    pdf_file = pdf_gen.create_crew_pdf(final_report_text, ticker)
+    
+    print(f"✅ Report saved successfully: {pdf_file}")

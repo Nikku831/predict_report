@@ -1,0 +1,31 @@
+# ----------------------------
+# Core numerical stack
+# ----------------------------
+numpy
+pandas
+pyyaml
+pydantic
+
+# ----------------------------
+# Machine Learning / NLP
+# ----------------------------
+torch
+torchvision
+torchaudio
+
+transformers
+tokenizers
+sentencepiece
+accelerate
+
+# ----------------------------
+# Agentic AI
+# ----------------------------
+crewai
+crewai-tools
+
+# ----------------------------
+# Utilities
+# ----------------------------
+tqdm
+requests

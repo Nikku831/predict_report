@@ -1,19 +1,36 @@
 from typing import Dict, Any, Optional
 
+
 def safe(x: Optional[float]) -> Optional[float]:
-    return None if x in (None, "", "NA") else float(x)
+    if x in (None, "", "NA"):
+        return None
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
 
 
 def compute_kpis(
     statements: Dict[str, Dict[str, float]],
     previous: Optional[Dict[str, float]] = None,
-    sentiment: Optional[Dict[str, float]] = None,
+    *,
+    compound_sentiment: Optional[float],
     tone: Optional[Dict[str, float]] = None
 ) -> Dict[str, Optional[float]]:
     """
-    Computes financial KPIs AND sentiment/tone KPIs.
-    This version ensures sentiment outputs are NEVER null.
+    Computes financial KPIs + sentiment/tone KPIs.
+
+    ❗ Sentiment is a REQUIRED upstream dependency.
+    If compound_sentiment is missing, this function MUST fail.
     """
+
+    # -------------------------
+    # Enforce sentiment dependency
+    # -------------------------
+    if compound_sentiment is None:
+        raise ValueError(
+            "compound_sentiment is required — sentiment must be computed before KPIs"
+        )
 
     # -------------------------
     # Extract financial data
@@ -25,6 +42,7 @@ def compute_kpis(
     cogs = safe(is_.get("cogs"))
     op_income = safe(is_.get("operating_income"))
     net_income = safe(is_.get("net_income"))
+
     total_equity = safe(bs_.get("total_equity"))
     total_debt = safe(bs_.get("total_debt"))
     current_assets = safe(bs_.get("current_assets"))
@@ -34,7 +52,8 @@ def compute_kpis(
     # -------------------------
     # Initialize KPI dict
     # -------------------------
-    kpis = {
+    kpis: Dict[str, Optional[float]] = {
+        # Financial
         "revenue": revenue,
         "gross_margin_pct": None,
         "operating_margin_pct": None,
@@ -46,13 +65,13 @@ def compute_kpis(
         "revenue_growth_yoy": None,
         "net_income_growth_yoy": None,
 
-        # sentiment + tone KPIs
-        "compound_sentiment": 0.0,
-        "tone_positive_ratio": 0.0,
-        "tone_negative_ratio": 0.0,
-        "uncertainty_index": 0.0,
-        "hedging_index": 0.0,
-        "confidence_index": 0.0
+        # Sentiment / Tone (NO DEFAULT MASKING)
+        "compound_sentiment": compound_sentiment,
+        "tone_positive_ratio": None,
+        "tone_negative_ratio": None,
+        "uncertainty_index": None,
+        "hedging_index": None,
+        "confidence_index": None,
     }
 
     # -------------------------
@@ -61,16 +80,20 @@ def compute_kpis(
     if revenue and cogs is not None:
         kpis["gross_margin_pct"] = (revenue - cogs) / revenue * 100
 
-    if revenue and op_income:
+    if revenue and op_income is not None:
         kpis["operating_margin_pct"] = op_income / revenue * 100
 
-    if revenue and net_income:
+    if revenue and net_income is not None:
         kpis["net_margin_pct"] = net_income / revenue * 100
 
     if current_assets and current_liabilities:
         kpis["current_ratio"] = current_assets / current_liabilities
 
-    if current_assets and current_liabilities and inventory is not None:
+    if (
+        current_assets
+        and current_liabilities
+        and inventory is not None
+    ):
         kpis["quick_ratio"] = (current_assets - inventory) / current_liabilities
 
     if total_debt and total_equity:
@@ -83,8 +106,8 @@ def compute_kpis(
     # Growth Metrics
     # -------------------------
     if previous:
-        prev_rev = previous.get("revenue")
-        prev_ni = previous.get("net_income")
+        prev_rev = safe(previous.get("revenue"))
+        prev_ni = safe(previous.get("net_income"))
 
         if revenue and prev_rev:
             kpis["revenue_growth_yoy"] = (revenue - prev_rev) / prev_rev * 100
@@ -93,19 +116,13 @@ def compute_kpis(
             kpis["net_income_growth_yoy"] = (net_income - prev_ni) / prev_ni * 100
 
     # -------------------------
-    # Inject Sentiment
-    # -------------------------
-    if sentiment:
-        kpis["compound_sentiment"] = float(sentiment.get("compound_sentiment", 0.0))
-
-    # -------------------------
     # Inject Tone Metrics
     # -------------------------
     if tone:
-        kpis["tone_positive_ratio"] = tone.get("tone_positive_ratio", 0.0)
-        kpis["tone_negative_ratio"] = tone.get("tone_negative_ratio", 0.0)
-        kpis["uncertainty_index"] = tone.get("uncertainty_index", 0.0)
-        kpis["hedging_index"] = tone.get("hedging_index", 0.0)
-        kpis["confidence_index"] = tone.get("confidence_index", 0.0)
+        kpis["tone_positive_ratio"] = tone.get("tone_positive_ratio")
+        kpis["tone_negative_ratio"] = tone.get("tone_negative_ratio")
+        kpis["uncertainty_index"] = tone.get("uncertainty_index")
+        kpis["hedging_index"] = tone.get("hedging_index")
+        kpis["confidence_index"] = tone.get("confidence_index")
 
     return kpis

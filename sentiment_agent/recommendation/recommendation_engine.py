@@ -1,6 +1,6 @@
 """
 recommendation_engine.py
-Original file content restored.
+Corrected sentiment handling.
 """
 
 from typing import Dict, Any, Optional
@@ -36,30 +36,45 @@ _llm = pipeline(
     device=_DEVICE
 )
 
+# --------------------------------------------------
+# ✅ FIXED RISK ASSESSMENT
+# --------------------------------------------------
 def _assess_risk_from_payload(payload: Dict[str, Any]) -> str:
     kpis = payload.get("kpis", {})
-    sentiment = payload.get("sentiment", {})
 
     try:
         dte = float(kpis.get("debt_to_equity", 0))
     except Exception:
         dte = 0.0
 
-    if dte > 1.0: return "high"
-    if dte > 0.5: return "medium"
+    if dte > 1.0:
+        return "high"
+    if dte > 0.5:
+        return "medium"
 
     try:
-        compound = float(sentiment.get("compound_sentiment", 0.0))
+        compound = float(payload.get("sentiment_score"))
     except Exception:
-        compound = 0.0
+        compound = None
 
-    if compound < 0.2: return "high"
-    if compound < 0.4: return "medium"
+    if compound is None:
+        raise ValueError("sentiment_score missing in recommendation payload")
+
+    if compound < 0.2:
+        return "high"
+    if compound < 0.4:
+        return "medium"
     return "low"
 
 def _generate_local_explanation(prompt: str) -> Optional[str]:
     try:
-        output = _llm(prompt, max_new_tokens=80, do_sample=False, num_beams=2, early_stopping=True)
+        output = _llm(
+            prompt,
+            max_new_tokens=80,
+            do_sample=False,
+            num_beams=2,
+            early_stopping=True
+        )
         text = output[0]["generated_text"].strip()
         text = text.replace("-LRB-", "(").replace("-RRB-", ")").replace("  ", " ")
         return text
@@ -81,16 +96,22 @@ def _build_prompt(payload: Dict[str, Any], scores: Dict[str, float]) -> str:
         "Rewrite this as a short 3–4 sentence investment rationale."
     )
 
+# --------------------------------------------------
+# ✅ FIXED RECOMMENDATION PIPELINE
+# --------------------------------------------------
 def generate_recommendation(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Payload must be a dictionary")
 
     kpis = payload.get("kpis", {})
-    sentiment = payload.get("sentiment", {})
     peer_data = payload.get("peer_data", {})
 
+    sentiment_score_input = payload.get("sentiment_score")
+    if sentiment_score_input is None:
+        raise ValueError("sentiment_score missing from recommendation payload")
+
     kpi_score = score_kpis(kpis)
-    sentiment_score = score_sentiment(sentiment)
+    sentiment_score = score_sentiment(sentiment_score_input)
     peer_score = score_peers(peer_data)
 
     risk_level = _assess_risk_from_payload(payload)
@@ -102,9 +123,12 @@ def generate_recommendation(payload: Dict[str, Any]) -> Dict[str, Any]:
     buy_min = RATING_THRESHOLDS.get("buy", 75)
     hold_min = RATING_THRESHOLDS.get("hold", 50)
 
-    if final_score >= buy_min: rating = "BUY"
-    elif final_score >= hold_min: rating = "HOLD"
-    else: rating = "SELL"
+    if final_score >= buy_min:
+        rating = "BUY"
+    elif final_score >= hold_min:
+        rating = "HOLD"
+    else:
+        rating = "SELL"
 
     confidence = round(final_score / 100.0, 2)
 

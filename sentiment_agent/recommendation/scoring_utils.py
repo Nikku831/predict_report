@@ -1,15 +1,15 @@
 """
 scoring_utils.py
-Original file content restored.
+Corrected sentiment scoring to accept numeric compound sentiment.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # ---------------------------
-# KPI threshold scoring (0-5 per KPI)
+# KPI threshold scoring (0–50)
 # ---------------------------
 
-def _score_growth_threshold(value: float) -> int:
+def _score_growth_threshold(value: Optional[float]) -> int:
     if value is None:
         return 0
     try:
@@ -26,7 +26,8 @@ def _score_growth_threshold(value: float) -> int:
         return 2
     return 0
 
-def _score_margin_threshold(value: float) -> int:
+
+def _score_margin_threshold(value: Optional[float]) -> int:
     if value is None:
         return 0
     try:
@@ -43,7 +44,8 @@ def _score_margin_threshold(value: float) -> int:
         return 2
     return 0
 
-def _score_roe(value: float) -> int:
+
+def _score_roe(value: Optional[float]) -> int:
     if value is None:
         return 0
     try:
@@ -60,7 +62,8 @@ def _score_roe(value: float) -> int:
         return 2
     return 0
 
-def _score_debt_to_equity(value: float) -> int:
+
+def _score_debt_to_equity(value: Optional[float]) -> int:
     if value is None:
         return 0
     try:
@@ -77,7 +80,8 @@ def _score_debt_to_equity(value: float) -> int:
         return 2
     return 0
 
-def _score_fcf_trend(value: str) -> int:
+
+def _score_fcf_trend(value: Optional[str]) -> int:
     if value is None:
         return 0
     v = str(value).strip().lower()
@@ -89,61 +93,55 @@ def _score_fcf_trend(value: str) -> int:
         return 0
     return 0
 
-def score_kpis(kpi: Dict[str, Any]) -> float:
-    per_kpi_scores = []
-    per_kpi_scores.append(_score_growth_threshold(kpi.get("revenue_growth")))
-    per_kpi_scores.append(_score_growth_threshold(kpi.get("net_income_growth")))
-    per_kpi_scores.append(_score_growth_threshold(kpi.get("eps_growth")))
-    per_kpi_scores.append(_score_margin_threshold(kpi.get("gross_margin")))
-    per_kpi_scores.append(_score_margin_threshold(kpi.get("operating_margin")))
-    per_kpi_scores.append(_score_roe(kpi.get("roe")))
-    per_kpi_scores.append(_score_debt_to_equity(kpi.get("debt_to_equity")))
-    per_kpi_scores.append(_score_fcf_trend(kpi.get("fcf_trend")))
 
-    avg = sum(per_kpi_scores) / len(per_kpi_scores) if per_kpi_scores else 0.0
+def score_kpis(kpi: Dict[str, Any]) -> float:
+    """
+    Returns KPI score in range [0, 50]
+    """
+    scores = [
+        _score_growth_threshold(kpi.get("revenue_growth_yoy")),
+        _score_growth_threshold(kpi.get("net_income_growth_yoy")),
+        _score_margin_threshold(kpi.get("gross_margin_pct")),
+        _score_margin_threshold(kpi.get("operating_margin_pct")),
+        _score_roe(kpi.get("roe_pct")),
+        _score_debt_to_equity(kpi.get("debt_to_equity")),
+        _score_fcf_trend(kpi.get("fcf_trend")),
+    ]
+
+    avg = sum(scores) / len(scores) if scores else 0.0
     return (avg / 5.0) * 50.0
 
-# ---------------------------
-# Sentiment scoring (0-20)
-# ---------------------------
-
-def score_sentiment(sentiment: Dict[str, Any]) -> float:
-    score = 0
-    overall = sentiment.get("overall_score")
-    try:
-        o = float(overall) if overall is not None else 0.0
-    except Exception:
-        o = 0.0
-
-    if o > 0.6: score += 8
-    elif o > 0.3: score += 5
-    else: score += 1
-
-    tone = str(sentiment.get("tone", "")).lower()
-    if tone == "confident": score += 6
-    elif tone == "neutral": score += 3
-    else: score += 1
-
-    hedging = sentiment.get("hedging")
-    try:
-        h = int(hedging) if hedging is not None else 0
-    except Exception:
-        h = 0
-    if h < 5: score += 3
-    elif h < 10: score += 2
-
-    um = sentiment.get("uncertainty_markers")
-    try:
-        um_v = int(um) if um is not None else 999
-    except Exception:
-        um_v = 999
-    if um_v < 5: score += 3
-    elif um_v < 10: score += 1
-
-    return min(float(score), 20.0)
 
 # ---------------------------
-# Peer scoring (0-30)
+# Sentiment scoring (0–20)
+# ---------------------------
+
+def score_sentiment(compound: float) -> float:
+    """
+    Converts compound sentiment score [-1, +1]
+    into sentiment contribution [0, 20].
+
+    Neutral (0.0) → 10
+    Positive (+1.0) → 20
+    Negative (-1.0) → 0
+    """
+    if compound is None:
+        raise ValueError("compound sentiment must not be None")
+
+    try:
+        c = float(compound)
+    except Exception:
+        raise ValueError("compound sentiment must be numeric")
+
+    # Clamp for safety
+    c = max(-1.0, min(1.0, c))
+
+    # Linear mapping
+    return (c + 1.0) * 10.0
+
+
+# ---------------------------
+# Peer scoring (0–30)
 # ---------------------------
 
 def score_peers(peer: Dict[str, Any]) -> float:
@@ -154,12 +152,15 @@ def score_peers(peer: Dict[str, Any]) -> float:
     combined = 0.4 * valuation + 0.3 * profitability + 0.3 * growth
     return max(0.0, min(combined * 30.0, 30.0))
 
+
 # ---------------------------
 # Risk penalty
 # ---------------------------
 
 def risk_penalty(risk_level: str) -> int:
     rl = (risk_level or "").lower()
-    if rl == "high": return -15
-    if rl == "medium": return -5
+    if rl == "high":
+        return -15
+    if rl == "medium":
+        return -5
     return 0

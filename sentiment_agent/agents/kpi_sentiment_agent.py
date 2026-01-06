@@ -8,10 +8,12 @@ from ..core.fhi import compute_fhi
 from ..core.sentiment_model import analyze_sentiment
 from ..core.tone_rules import compute_tone_metrics
 
+
 class KPI_FHI_SentimentAgent:
     """
     Deterministic agent.
-    Logic restored to original: KPIs computed first.
+    ✅ Corrected execution order:
+    Sentiment → KPIs → FHI → Tone → Risk
     """
 
     def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -27,16 +29,36 @@ class KPI_FHI_SentimentAgent:
         period = payload["period"]
 
         # ----------------------------
-        # 1. Compute KPIs (Original Order)
+        # 1. Sentiment Analysis (MUST BE FIRST)
+        # ----------------------------
+        transcript = payload["earnings_call"].get("transcript", "")
+        sentiment = analyze_sentiment(transcript)
+
+        compound_sentiment = sentiment.get("compound")
+        if compound_sentiment is None:
+            raise ValueError("Sentiment model did not return compound score")
+
+        # ----------------------------
+        # 2. Inject sentiment into payload
+        # ----------------------------
+        payload["compound_sentiment"] = compound_sentiment
+
+        # ----------------------------
+        # 3. Compute KPIs (NOW SAFE)
         # ----------------------------
         statements = payload["statements"]
         historical = payload.get("historical_kpis", [])
 
         prev_kpis = historical[-1]["kpis"] if historical else None
-        kpis = compute_kpis(statements, previous=prev_kpis)
+
+        kpis = compute_kpis(
+            statements,
+            previous=prev_kpis,
+            compound_sentiment=compound_sentiment  # ✅ explicit dependency
+        )
 
         # ----------------------------
-        # 2. Compute FHI
+        # 4. Compute FHI
         # ----------------------------
         fhi_value, dim_scores = compute_fhi(kpis)
         fhi = {
@@ -45,18 +67,12 @@ class KPI_FHI_SentimentAgent:
         }
 
         # ----------------------------
-        # 3. Sentiment Analysis
-        # ----------------------------
-        transcript = payload["earnings_call"].get("transcript", "")
-        sentiment = analyze_sentiment(transcript)
-
-        # ----------------------------
-        # 4. Tone Analysis
+        # 5. Tone Analysis
         # ----------------------------
         tone = compute_tone_metrics(transcript)
 
         # ----------------------------
-        # 5. Risk Flags
+        # 6. Risk Flags
         # ----------------------------
         risk_flags: List[str] = []
 
@@ -82,7 +98,10 @@ class KPI_FHI_SentimentAgent:
             "risk_flags": risk_flags,
         }
 
+
 def run_kpi_sentiment_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
-    # Instantiates the class directly to avoid CrewAI API Key check
+    """
+    Direct runner (avoids CrewAI API key checks)
+    """
     agent = KPI_FHI_SentimentAgent()
     return agent.run(payload)

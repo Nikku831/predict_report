@@ -3,70 +3,78 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipe
 import torch
 import numpy as np
 
+# ----------------------------------------------------------------------
+# Singleton-style model load (CRITICAL for performance)
+# ----------------------------------------------------------------------
+_DEVICE = 0 if torch.cuda.is_available() else -1
+_MODEL_NAME = "ProsusAI/finbert"
+
+_tokenizer = AutoTokenizer.from_pretrained(_MODEL_NAME)
+_model = AutoModelForSequenceClassification.from_pretrained(_MODEL_NAME)
+
+_sentiment_pipeline = pipeline(
+    task="text-classification",
+    model=_model,
+    tokenizer=_tokenizer,
+    return_all_scores=True,
+    truncation=True,
+    device=_DEVICE
+)
+
 
 class SentimentModel:
     """
-    FinBERT-based sentiment engine.
-    Returns:
-        - compound_sentiment
-        - positive / negative / neutral probabilities
-    Designed for long earnings call transcripts.
+    FinBERT-based sentiment engine for earnings call transcripts.
+
+    Returns a NORMALIZED schema used across the entire pipeline:
+    {
+        "compound": float,
+        "compound_sentiment": float,
+        "positive": float,
+        "neutral": float,
+        "negative": float,
+        "label": "positive" | "neutral" | "negative"
+    }
     """
 
-    def __init__(self, model_name: str = "ProsusAI/finbert"):
-        self.device = 0 if torch.cuda.is_available() else -1
-
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-
-        self.sentiment_pipeline = pipeline(
-            "text-classification",
-            model=self.model,
-            tokenizer=self.tokenizer,
-            return_all_scores=True,
-            truncation=True,
-            device=self.device
-        )
-
-    # ----------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # helpers
-    # ----------------------------------------------------------------------
+    # ------------------------------------------------------------------
     @staticmethod
     def _chunk_text(text: str, max_chars: int = 2000) -> List[str]:
         """
-        Splits long transcript into smaller pieces for stable inference.
+        Splits long transcript into smaller chunks for stable inference.
         """
-        chunks = []
-        for i in range(0, len(text), max_chars):
-            chunks.append(text[i:i + max_chars])
-        return chunks
+        return [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
 
     @staticmethod
     def _compound_score(pos: float, neg: float) -> float:
         """
-        FinBERT-like compound sentiment score.
+        FinBERT-style compound sentiment score.
+        Range: [-1, +1]
         """
         return float(pos - neg)
 
-    # ----------------------------------------------------------------------
-    # main inference function
-    # ----------------------------------------------------------------------
+    @staticmethod
+    def _label_from_scores(pos: float, neu: float, neg: float) -> str:
+        if pos >= max(neu, neg):
+            return "positive"
+        if neg >= max(pos, neu):
+            return "negative"
+        return "neutral"
+
+    # ------------------------------------------------------------------
+    # main inference
+    # ------------------------------------------------------------------
     def analyze(self, text: str) -> Dict[str, Any]:
-        """
-        Returns:
-           {
-             "compound_sentiment": float,
-             "positive": float,
-             "neutral": float,
-             "negative": float
-           }
-        """
-        if not text.strip():
+        if not text or not text.strip():
             return {
+                "compound": 0.0,
                 "compound_sentiment": 0.0,
                 "positive": 0.0,
                 "neutral": 1.0,
-                "negative": 0.0
+                "negative": 0.0,
+                "label": "neutral"
             }
 
         chunks = self._chunk_text(text)
@@ -74,7 +82,7 @@ class SentimentModel:
 
         # ---- Run FinBERT on each chunk ----
         for c in chunks:
-            scores = self.sentiment_pipeline(c)[0]
+            scores = _sentiment_pipeline(c)[0]
 
             pos = next(s["score"] for s in scores if s["label"].lower() == "positive")
             neg = next(s["score"] for s in scores if s["label"].lower() == "negative")
@@ -90,18 +98,30 @@ class SentimentModel:
         avg_neu = float(np.mean(all_neu))
 
         compound = self._compound_score(avg_pos, avg_neg)
+        label = self._label_from_scores(avg_pos, avg_neu, avg_neg)
 
         return {
+            # ✅ canonical field used by agent & adapter
+            "compound": compound,
+
+            # ✅ backward-compatible field used by KPI calculators
             "compound_sentiment": compound,
+
             "positive": avg_pos,
             "neutral": avg_neu,
-            "negative": avg_neg
+            "negative": avg_neg,
+            "label": label
         }
 
 
 # ----------------------------------------------------------------------
-# Simple convenience wrapper
+# Convenience wrapper (used by agents)
 # ----------------------------------------------------------------------
+_SENTIMENT_MODEL = SentimentModel()
+
 def analyze_sentiment(text: str) -> Dict[str, Any]:
-    model = SentimentModel()
-    return model.analyze(text)
+    """
+    Public API used across the project.
+    Guaranteed to return 'compound'.
+    """
+    return _SENTIMENT_MODEL.analyze(text)

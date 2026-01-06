@@ -1,0 +1,76 @@
+profitability:
+  roe_pct:
+    type: higher_better
+    low: 5
+    high: 20
+  gross_margin_pct:
+    type: higher_better
+    low: 20
+    high: 60
+  operating_margin_pct:
+    type: higher_better
+    low: 10
+    high: 30
+  net_margin_pct:
+    type: higher_better
+    low: 5
+    high: 20
+
+liquidity:
+  current_ratio:
+    type: higher_better
+    low: 1.0
+    high: 2.5
+  quick_ratio:
+    type: higher_better
+    low: 0.8
+    high: 2.0
+
+solvency:
+  debt_to_equity:
+    type: lower_better
+    low: 0.2
+    high: 3.0
+
+growth:
+  revenue_growth_yoy:
+    type: higher_better
+    low: 0
+    high: 20
+  net_income_growth_yoy:
+    type: higher_better
+    low: 0
+    high: 20
+
+sentiment:
+  compound_sentiment:
+    type: higher_better
+    low: -0.05     # negative or uncertain tone
+    high: 0.20     # strong positive tone in earnings calls
+
+  tone_positive_ratio:
+    type: higher_better
+    low: 0.10      # 10% positive tone
+    high: 0.40      # 40% or more positive tone
+
+  tone_negative_ratio:
+    type: lower_better
+    low: 0.02      # acceptable small negativity
+    high: 0.15      # heavy negative tone signals issues
+
+  uncertainty_index:
+    type: lower_better
+    low: 0.01      # below 1% uncertainty terms
+    high: 0.05      # high uncertainty language
+
+  hedging_index:
+    type: lower_better
+    low: 0.01      # low hedging language (confident management)
+    high: 0.07      # excessive hedging (management cautious)
+
+weights:
+  profitability: 0.35
+  liquidity: 0.20
+  solvency: 0.15
+  growth: 0.15
+  sentiment: 0.15

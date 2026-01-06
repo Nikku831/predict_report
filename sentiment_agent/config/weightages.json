@@ -1,0 +1,5 @@
+{
+  "kpi_weight": 50,
+  "sentiment_weight": 20,
+  "peer_weight": 30
+}

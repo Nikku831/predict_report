@@ -1,0 +1,30 @@
+# --- CrewAI & LLM Stack ---
+crewai[google-genai]
+crewai-tools
+litellm
+langchain
+langchain-google-genai
+langchain-community
+google-generativeai
+google-ai-generativelanguage
+
+# --- Data Science & Math ---
+pandas
+numpy
+scikit-learn
+prophet
+matplotlib
+tabulate
+
+# --- Financial Data & Web ---
+yfinance
+requests
+
+# --- NLP & AI Models (Sentiment Engine) ---
+transformers
+torch
+
+# --- Utilities ---
+python-dotenv
+fpdf
+PyYAML

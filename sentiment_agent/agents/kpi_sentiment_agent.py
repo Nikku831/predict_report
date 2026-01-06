@@ -12,8 +12,13 @@ from ..core.tone_rules import compute_tone_metrics
 class KPI_FHI_SentimentAgent:
     """
     Deterministic agent.
-    ✅ Corrected execution order:
-    Sentiment → KPIs → FHI → Tone → Risk
+
+    ✅ Correct execution order:
+    1. Sentiment Analysis
+    2. Tone Analysis
+    3. KPI Computation (with sentiment + tone)
+    4. Financial Health Index (FHI)
+    5. Risk Flagging
     """
 
     def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -28,10 +33,11 @@ class KPI_FHI_SentimentAgent:
         company_id = payload["company_id"]
         period = payload["period"]
 
-        # ----------------------------
-        # 1. Sentiment Analysis (MUST BE FIRST)
-        # ----------------------------
         transcript = payload["earnings_call"].get("transcript", "")
+
+        # ----------------------------
+        # 1. Sentiment Analysis
+        # ----------------------------
         sentiment = analyze_sentiment(transcript)
 
         compound_sentiment = sentiment.get("compound")
@@ -39,12 +45,12 @@ class KPI_FHI_SentimentAgent:
             raise ValueError("Sentiment model did not return compound score")
 
         # ----------------------------
-        # 2. Inject sentiment into payload
+        # 2. Tone Analysis (MUST COME BEFORE KPIs)
         # ----------------------------
-        payload["compound_sentiment"] = compound_sentiment
+        tone = compute_tone_metrics(transcript)
 
         # ----------------------------
-        # 3. Compute KPIs (NOW SAFE)
+        # 3. Compute KPIs (with sentiment + tone)
         # ----------------------------
         statements = payload["statements"]
         historical = payload.get("historical_kpis", [])
@@ -52,13 +58,14 @@ class KPI_FHI_SentimentAgent:
         prev_kpis = historical[-1]["kpis"] if historical else None
 
         kpis = compute_kpis(
-            statements,
+            statements=statements,
             previous=prev_kpis,
-            compound_sentiment=compound_sentiment  # ✅ explicit dependency
+            compound_sentiment=compound_sentiment,
+            tone=tone
         )
 
         # ----------------------------
-        # 4. Compute FHI
+        # 4. Compute Financial Health Index (FHI)
         # ----------------------------
         fhi_value, dim_scores = compute_fhi(kpis)
         fhi = {
@@ -67,12 +74,7 @@ class KPI_FHI_SentimentAgent:
         }
 
         # ----------------------------
-        # 5. Tone Analysis
-        # ----------------------------
-        tone = compute_tone_metrics(transcript)
-
-        # ----------------------------
-        # 6. Risk Flags
+        # 5. Risk Flags (qualitative)
         # ----------------------------
         risk_flags: List[str] = []
 

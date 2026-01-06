@@ -81,8 +81,9 @@ class KPI_FHI_Crew:
         # 3. Recommendation Generation
         # --------------------------------------------------
         self._log("📊 Generating investment recommendation...")
-
+        
         rec_input = adapt_for_recommendation(analysis_result)
+        rec_input["peer_data"] = payload.get("peer_data", {})
         recommendation = generate_recommendation(rec_input)
 
         # --------------------------------------------------

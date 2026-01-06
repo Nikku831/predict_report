@@ -1,39 +1,41 @@
-import json
+import sys
 from sentiment_agent import KPI_FHI_Crew
+# Import the ingestion module
+from sentiment_agent.ingestion import fetch_company_data
 
-# ✅ FIXED PAYLOAD: Keys now match 'kpi_calculator.py' expectations
-payload = {
-  "company_id": "INFY",
-  "period": "Q2-FY2025",
-  "statements": {
-    "income_statement": {
-      "revenue": 36500,
-      "net_income": 7200,        # Changed from 'net_profit'
-      "operating_income": 9500,  # Added (Derived from Rev - Exp)
-      "cogs": 21000              # Added (Required for Gross Margin)
-    },
-    "balance_sheet": {
-      "total_assets": 120000,
-      "total_liabilities": 45000,
-      "total_equity": 75000,
-      "total_debt": 20000,
-      "current_assets": 40000,       # Added for Liquidity Ratios
-      "current_liabilities": 30000,  # Added for Liquidity Ratios
-      "inventory": 5000              # Added for Quick Ratio
-    },
-    "cash_flow": {
-      "operating_cash_flow": 9800,
-      "investing_cash_flow": -3200,
-      "financing_cash_flow": -1500
-    }
-  },
-  "earnings_call": {
-    "transcript": "We achieved strong revenue growth this quarter with stable margins. We are confident in our future outlook despite some minor headwinds."
-  }
-}
+def run():
+    # 1. Configuration
+    # Use "AAPL" for US stocks or "RELIANCE.NS" for Indian stocks.
+    # The ingestion script now handles the INR conversion automatically.
+    TARGET_COMPANY = "IDEA.NS" 
+    
+    # 2. Automated Ingestion
+    print(f"\n--- Starting Automated Ingestion for {TARGET_COMPANY} ---")
+    try:
+        # This fetches statements, history, and news automatically
+        payload = fetch_company_data(TARGET_COMPANY)
+        
+        # Validation print to ensure data is there
+        print(f"Data Fetched Successfully!")
+        
+        # Optional: Print Revenue to verify it looks correct (e.g. Trillions for INR)
+        rev = payload['statements']['income_statement']['revenue']
+        print(f"Revenue (INR): {rev:,.2f}")
+        print(f"News Chars: {len(payload['earnings_call']['transcript'])}")
+        
+    except Exception as e:
+        print(f"CRITICAL ERROR during ingestion: {e}")
+        sys.exit(1)
 
-# Run the agent
-crew = KPI_FHI_Crew(verbose=True)
-result = crew.run(payload)
+    # 3. Run the Agent Crew
+    print("\n--- Initializing Agent Crew ---")
+    crew = KPI_FHI_Crew(verbose=True)
+    result = crew.run(payload)
+    
+    print("\n\n########################")
+    print("## FINAL ANALYSIS RESULT ##")
+    print("########################\n")
+    print(result)
 
-print(json.dumps(result, indent=2))
+if __name__ == "__main__":
+    run()
